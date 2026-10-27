@@ -24,7 +24,7 @@
   },
   "stress_cases": 75,
   "stress_watertight_share": 1.0,
-  "stress_wall_p05_min_ratio": 0.9713649222289005,
+  "stress_wall_p05_min_ratio": 0.9733633102280783,
   "ankle_I_p95_over_p05": 1.8485782230305337,
   "ankle_I_max_over_min": 5.238346914262861,
   "equal_stiffness_thickness_p05_p95": [
