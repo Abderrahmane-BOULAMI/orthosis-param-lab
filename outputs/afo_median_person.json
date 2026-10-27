@@ -1,0 +1,25 @@
+{
+  "measures": {
+    "foot_length": 264.0,
+    "foot_breadth": 99.0,
+    "heel_breadth": 72.0,
+    "ball_length": 196.0,
+    "ankle_circ": 228.0,
+    "calf_circ": 390.0,
+    "malleolus_height": 70.0,
+    "bimalleolar_breadth": 72.0,
+    "tibial_height": 457.0
+  },
+  "params": {
+    "thickness": 3.0,
+    "clearance": 3.0,
+    "wrap_deg": 200.0,
+    "top_below_tibiale": 40.0,
+    "calf_level": 0.72,
+    "calf_ratio": 1.15,
+    "plate_length": 0.95,
+    "vent_rows": 4,
+    "levels": 36,
+    "arc_points": 48
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "people": 300,
+  "watertight_share": 1.0,
+  "gen_seconds_median": 0.07351171599975714,
+  "volume_cm3_median": 293.98170353777033,
+  "mass_petg_g_p05_p95": [
+    301.00297388247725,
+    438.8279253363842
+  ],
+  "height_mm_p05_p95": [
+    360.95,
+    464.1
+  ],
+  "fits_desktop_share": 0.0,
+  "fits_large_share": 0.7866666666666666,
+  "min_cube_mm_p50_p95": [
+    379.8948553169809,
+    418.9365465649524
+  ],
+  "large_bed_orientation_counts": {
+    "on_back": 139,
+    "standing": 97,
+    "NaN": 64
+  },
+  "stress_cases": 50,
+  "stress_watertight_share": 1.0,
+  "stress_wall_p05_min_ratio": 0.9746746059526501,
+  "ankle_I_p95_over_p05": 1.9133107591643679,
+  "ankle_I_max_over_min": 3.4397538111772064,
+  "equal_stiffness_thickness_p05_p95": [
+    2.2398676128637125,
+    3.9934892892278446
+  ],
+  "trimline_120_vs_200": 0.10432026678785915,
+  "sizing_test_people": 165,
+  "sizing_4_foot_length_sizes": 0.14545454545454545,
+  "sizing_12_foot_length_sizes": 0.2606060606060606,
+  "sizing_40_multi_dim_sizes": 0.3212121212121212,
+  "sizing_miss_by_dim_4_sizes": {
+    "foot_length": 0.08484848484848485,
+    "foot_breadth": 0.14545454545454545,
+    "heel_breadth": 0.20606060606060606,
+    "ankle_circ": 0.45454545454545453,
+    "calf_circ": 0.5454545454545454,
+    "malleolus_height": 0.09696969696969697,
+    "tibial_height": 0.3333333333333333
+  },
+  "assistant_lgbm_mae_mm": {
+    "foot_breadth": 3.5,
+    "heel_breadth": 3.1,
+    "ball_length": 3.9,
+    "ankle_circ": 9.1,
+    "calf_circ": 16.7,
+    "malleolus_height": 4.8,
+    "bimalleolar_breadth": 2.4,
+    "tibial_height": 12.3
+  },
+  "assistant_lgbm_within_tol": {
+    "foot_breadth": 0.8,
+    "heel_breadth": 0.88,
+    "ball_length": 0.96,
+    "ankle_circ": 0.587,
+    "calf_circ": 0.453,
+    "malleolus_height": 0.92,
+    "bimalleolar_breadth": 0.947,
+    "tibial_height": 0.853
+  },
+  "protocol_all_within_tol": {
+    "A_quick_only": 0.25333333333333335,
+    "B_quick_plus_two_girths": 0.52
+  },
+  "median_person": {
+    "foot_length": 264.0,
+    "foot_breadth": 94.0,
+    "heel_breadth": 71.0,
+    "ball_length": 193.0,
+    "ankle_circ": 227.0,
+    "calf_circ": 394.0,
+    "malleolus_height": 66.0,
+    "bimalleolar_breadth": 69.0,
+    "tibial_height": 458.0
+  },
+  "runtime_s": 69.5
+}
