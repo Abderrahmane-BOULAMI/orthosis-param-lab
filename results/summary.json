@@ -69,6 +69,18 @@
     "A_quick_only": 0.3098220171390903,
     "B_quick_plus_two_girths": 0.6466710613052077
   },
+  "scan_fit_gap_min_mm": {
+    "scan": 2.96,
+    "tape": -1.94
+  },
+  "scan_fit_gap_median_mm": {
+    "scan": 3.0,
+    "tape": 2.54
+  },
+  "scan_fit_pressing_share": {
+    "scan": 0.0,
+    "tape": 0.114
+  },
   "median_person": {
     "foot_length": 264.0,
     "foot_breadth": 99.0,

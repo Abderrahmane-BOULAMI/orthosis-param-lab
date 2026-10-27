@@ -1,7 +1,7 @@
 {
   "people": 300,
   "watertight_share": 1.0,
-  "gen_seconds_median": 0.07351171599975714,
+  "gen_seconds_median": 0.07255977199997687,
   "volume_cm3_median": 293.98170353777033,
   "mass_petg_g_p05_p95": [
     301.00297388247725,
@@ -24,7 +24,7 @@
   },
   "stress_cases": 50,
   "stress_watertight_share": 1.0,
-  "stress_wall_p05_min_ratio": 0.9746746059526501,
+  "stress_wall_p05_min_ratio": 0.9751544409178784,
   "ankle_I_p95_over_p05": 1.9133107591643679,
   "ankle_I_max_over_min": 3.4397538111772064,
   "equal_stiffness_thickness_p05_p95": [
@@ -69,6 +69,18 @@
     "A_quick_only": 0.25333333333333335,
     "B_quick_plus_two_girths": 0.52
   },
+  "scan_fit_gap_min_mm": {
+    "scan": 2.96,
+    "tape": -1.65
+  },
+  "scan_fit_gap_median_mm": {
+    "scan": 3.0,
+    "tape": 2.58
+  },
+  "scan_fit_pressing_share": {
+    "scan": 0.0,
+    "tape": 0.114
+  },
   "median_person": {
     "foot_length": 264.0,
     "foot_breadth": 94.0,
@@ -80,5 +92,5 @@
     "bimalleolar_breadth": 69.0,
     "tibial_height": 458.0
   },
-  "runtime_s": 69.5
+  "runtime_s": 68.4
 }

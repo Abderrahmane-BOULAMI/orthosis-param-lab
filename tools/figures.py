@@ -171,6 +171,31 @@ def build_volume():
     plt.close(fig)
 
 
+def scan_fit():
+    g = pd.read_csv(R / "scan_fit.csv")
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    for src, col, lab in (("tape", RUST, "shell from the tape (default shape assumptions)"),
+                          ("scan", TEAL, "shell from the scan")):
+        d = g[g.source == src].groupby("height_mm")["gap_mm"].min()
+        ax.plot(d.index, d.values, color=col, lw=2)
+        ax.text(d.index[-1] + 4, d.values[-1] + (0.45 if src == "scan" else 0), lab.split(" (")[0], color=col,
+                va="center", fontsize=10)
+    ax.axhline(0, color=INK, lw=1)
+    ax.hlines(3, g.height_mm.min(), g.height_mm.max(), color=MUTED, lw=1, ls=":")
+    ax.text(g.height_mm.min(), 3.3, "target: 3 mm liner clearance (the scan-based shell sits on it)", color=MUTED, fontsize=9.5)
+    ax.fill_between([g.height_mm.min(), g.height_mm.max()], -3, 0, color=RUST, alpha=0.06, lw=0)
+    ax.text(g.height_mm.min(), -2.6, "below 0: the shell presses on the leg", color=RUST, fontsize=9.5)
+    ax.set_xlim(g.height_mm.min(), g.height_mm.max() + 70)
+    ax.set_ylim(-3, 4.5)
+    ax.set_xlabel("height above the sole (mm)")
+    ax.set_ylabel("smallest gap skin to shell (mm)")
+    title(ax, "A scan removes the shape guesswork",
+          "synthetic scan with a lower, flatter calf than the generator assumes; median person")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "scan_fit.png", dpi=160)
+    plt.close(fig)
+
+
 def turntable(m, path=None, n=36):
     path = path or FIGURES / "turntable.gif"
     afo = geometry.build_afo(m, {"vent_rows": 4})
@@ -193,5 +218,6 @@ if __name__ == "__main__":
     assistant()
     stiffness()
     build_volume()
+    scan_fit()
     turntable(S["median_person"])
     print("figures written to", FIGURES)

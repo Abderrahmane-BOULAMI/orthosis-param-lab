@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ortholab import assistant, data, export, geometry, mechanics, printability as pr, sizing  # noqa: E402
+from ortholab import assistant, data, export, geometry, mechanics, printability as pr, scan, sizing  # noqa: E402
 from ortholab.config import DESIGN, MEASURES, OUTPUTS, RESULTS  # noqa: E402
 
 BEDS = {"desktop": (250.0, 210.0, 220.0), "large": (400.0, 400.0, 400.0)}
@@ -76,6 +76,21 @@ def trimline_curve(m):
                          for w in range(100, 221, 10)])
 
 
+def scan_study(m):
+    """A synthetic scan whose calf sits lower and is flatter than the generator assumes (64 % instead of 72 % of
+    tibial height, width/depth 1.25 instead of 1.15). Compare the tape-based and scan-based shells on that leg."""
+    truth = geometry.limb_profile(m, {**DESIGN, "calf_level": 0.64, "calf_ratio": 1.25})
+    leg = scan.limb_surface(truth, m["malleolus_height"] + 10, truth.z_top + 30)
+    prof = scan.profile_from_scan(leg, m)
+    zs = np.arange(m["malleolus_height"] + 40, prof.z_top - 10, 10)
+    dirs = (-160, -135, -110, -90, -70, -45, -20)
+    rows = []
+    for name, afo in (("tape", geometry.build_afo(m)), ("scan", geometry.build_afo(m, profile=prof))):
+        g = scan.fit_gaps(afo, leg, zs, DESIGN["thickness"], dirs)
+        rows += [{"source": name, "height_mm": z, "direction_deg": a, "gap_mm": v} for z, a, v in g]
+    return pd.DataFrame(rows)
+
+
 def main(sample):
     out = RESULTS / "sample" if sample else RESULTS
     out.mkdir(parents=True, exist_ok=True)
@@ -99,6 +114,10 @@ def main(sample):
     median_person = {k: float(df.loc[med_idx, k]) for k in MEASURES}
     trim = trimline_curve(median_person)
     trim.to_csv(out / "stiffness_trimline.csv", index=False)
+
+    gaps = scan_study(median_person)
+    gaps.to_csv(out / "scan_fit.csv", index=False)
+    g = gaps.groupby("source")["gap_mm"]
 
     if not sample:
         afo = geometry.build_afo(median_person, {"vent_rows": 4})
@@ -132,6 +151,9 @@ def main(sample):
         "assistant_lgbm_mae_mm": lgbm["mae_mm"].round(1).to_dict(),
         "assistant_lgbm_within_tol": lgbm["within_tol"].round(3).to_dict(),
         "protocol_all_within_tol": proto,
+        "scan_fit_gap_min_mm": g.min().round(2).to_dict(),
+        "scan_fit_gap_median_mm": g.median().round(2).to_dict(),
+        "scan_fit_pressing_share": gaps.assign(p=gaps.gap_mm < 0).groupby("source")["p"].mean().round(3).to_dict(),
         "median_person": median_person,
         "runtime_s": round(time.time() - t0, 1),
     }

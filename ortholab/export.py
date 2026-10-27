@@ -5,6 +5,18 @@ from pathlib import Path
 import rhino3dm
 
 
+def to_rhino_mesh(mesh, mesh_cls=None):
+    """Copy a trimesh into a Rhino mesh. mesh_cls is Rhino.Geometry.Mesh inside Rhino, rhino3dm.Mesh outside."""
+    rm = (mesh_cls or rhino3dm.Mesh)()
+    for v in mesh.vertices:
+        rm.Vertices.Add(float(v[0]), float(v[1]), float(v[2]))
+    for f in mesh.faces:
+        rm.Faces.AddFace(int(f[0]), int(f[1]), int(f[2]))
+    rm.Normals.ComputeNormals()
+    rm.Compact()
+    return rm
+
+
 def to_3dm(mesh, path, measures=None, params=None, name="AFO"):
     """Rhino file with one named mesh on an 'Orthosis' layer; measurements and parameters stored as user text."""
     model = rhino3dm.File3dm()
@@ -13,13 +25,7 @@ def to_3dm(mesh, path, measures=None, params=None, name="AFO"):
     layer.Name = "Orthosis"
     layer.Color = (46, 125, 150, 255)
     li = model.Layers.Add(layer)
-    rm = rhino3dm.Mesh()
-    for v in mesh.vertices:
-        rm.Vertices.Add(float(v[0]), float(v[1]), float(v[2]))
-    for f in mesh.faces:
-        rm.Faces.AddFace(int(f[0]), int(f[1]), int(f[2]))
-    rm.Normals.ComputeNormals()
-    rm.Compact()
+    rm = to_rhino_mesh(mesh)
     attr = rhino3dm.ObjectAttributes()
     attr.LayerIndex = li
     attr.Name = name

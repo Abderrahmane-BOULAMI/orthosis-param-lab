@@ -12,4 +12,8 @@ jobs:
       - run: pip install -r requirements.txt
       - name: All studies on the committed 300-person sample
         run: python experiments/run_all.py --sample
+      - name: Batch command on an example table
+        run: |
+          python -m ortholab.cli template patients.csv
+          python -m ortholab.cli batch patients.csv --out outputs/batch --vent-rows 4
       - run: pytest

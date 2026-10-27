@@ -15,6 +15,8 @@ tol = S["assistant_lgbm_within_tol"]
 mae = S["assistant_lgbm_mae_mm"]
 proto = S["protocol_all_within_tol"]
 miss = S["sizing_miss_by_dim_4_sizes"]
+sg_min, sg_med, sg_p = S["scan_fit_gap_min_mm"], S["scan_fit_gap_median_mm"], S["scan_fit_pressing_share"]
+sg_max = pd.read_csv(ROOT / "results" / "scan_fit.csv").groupby("source")["gap_mm"].max().round(2).to_dict()
 
 README = f"""<p align="center"><img src="docs/figures/banner.png" alt="Orthosis Param Lab" width="100%"></p>
 
@@ -51,6 +53,7 @@ and answers them with code that runs on real body measurements:
 | Ankle trimline 120° instead of 200° | **{S['trimline_120_vs_200']:.2f}×** the stiffness (beam model) |
 | Unseen people predicted within tolerance (LightGBM) | malleolus height {pct(tol['malleolus_height'])}, heel breadth {pct(tol['heel_breadth'])}, **ankle girth {pct(tol['ankle_circ'])}, calf girth {pct(tol['calf_circ'])}** |
 | Every predicted dimension in tolerance | quick inputs only {pct(proto['A_quick_only'])}; after taping ankle and calf {pct(proto['B_quick_plus_two_girths'])} |
+| Fit on a leg whose calf differs from the shape assumptions (synthetic scan) | from the tape: shell presses up to **{-sg_min['tape']:.1f} mm** into the leg at {pct(sg_p['tape'])} of points; from the scan: gap {sg_min['scan']:.2f} to {sg_max['scan']:.2f} mm for a 3 mm target |
 
 <p align="center"><img src="docs/figures/hero.png" alt="Orthoses for a small, a median and a large person" width="80%"></p>
 <p align="center"><sub>Same generator, three people from the survey (small, median, large), rendered at the same scale.</sub></p>
@@ -73,9 +76,13 @@ and answers them with code that runs on real body measurements:
   three orientations with bed rotation, support area above 45°, smallest cubic build volume, mass.
 * **Stiffness** (`ortholab/mechanics.py`): second moment of area of the exact ankle cross-section (Green's
   theorem), used to rank designs and to solve the thickness that equalises stiffness across people.
+* **Scan input** (`ortholab/scan.py`): slices a leg scan every 8 mm and replaces the assumed ellipses above the
+  ankle with the measured widths, depths and girths; `fit_gaps` then measures the skin-to-shell gap on the real meshes.
+* **Batch command** (`ortholab/cli.py`): a table of patients in, one STL, 3MF, `.3dm` and JSON per patient out,
+  plus a check report; the exit code fails the batch if a part is not printable.
 * **Rhino and Grasshopper**: `.3dm` files are written with `rhino3dm`, with every measurement and parameter stored
-  as user text on the object, and read back in the tests. The core works on plain numbers, so it can move into a
-  Grasshopper Python component; that step is not done yet.
+  as user text on the object. `grasshopper/afo_component.py` is a Rhino 8 Python component that calls the same
+  generator and outputs a Rhino mesh; it is tested outside Rhino with `rhino3dm` standing in for `Rhino.Geometry`.
 
 ## Why made-to-measure
 
@@ -110,6 +117,41 @@ leaves about a tenth of the stiffness, which is how a rigid AFO becomes a flexib
 A full-height AFO does not fit a common desktop printer in any orientation. Lying it on its back trades height for
 support material; the code reports both, so the choice is explicit.
 
+## Scan-ready
+
+<p align="center"><img src="docs/figures/scan_fit.png" alt="Scan versus tape fit" width="85%"></p>
+
+Nine tape measurements fix the girths, not where the calf is or how flat it is. Here the leg (a synthetic scan built for
+the test) has its calf lower and flatter than the generator assumes. The shell made from the tape presses up to
+{-sg_min['tape']:.1f} mm into the calf; the shell made from the scan keeps the 3 mm liner clearance everywhere it was
+measured. The heel and malleoli still come from the tape, because foot scans are noisy there.
+
+```python
+from ortholab import geometry, scan
+prof = scan.profile_from_scan(leg_scan_mesh, measures)          # scan in mm, z up from the sole
+afo = geometry.build_afo(measures, profile=prof)
+gaps = scan.fit_gaps(afo, leg_scan_mesh, heights=range(110, 400, 10), thickness=3.0)
+```
+
+## Batch production
+
+```bash
+python -m ortholab.cli template patients.csv                  # example table: id + nine measurements
+python -m ortholab.cli batch patients.csv --out outputs/batch --vent-rows 4
+```
+
+Each patient gets `afo_<id>.stl`, `.3mf`, `.3dm` and `.json`; `report.csv` lists watertightness, wall thickness
+(5th percentile of ray samples), mass, smallest printer cube, best orientation, support area and ankle stiffness.
+Measurements outside the survey range raise a warning, and the command exits with code 1 if any part fails, for
+example a wall under the 2 mm minimum.
+
+## Grasshopper
+
+Paste `grasshopper/afo_component.py` into a Rhino 8 Python 3 component, add the inputs listed at the top of the file
+(`repo`, `measures`, `thickness`, `clearance`, `ankle_wrap`, `vent_rows`) and the `afo` and `report` outputs. The
+first run installs the Python packages through the `# r:` line. This is the bridge to a Grasshopper definition; it has
+been run outside Rhino only.
+
 ## Dashboard
 
 ```bash
@@ -129,7 +171,7 @@ STL, 3MF or `.3dm`. The other tabs show the sizing study, the measurement assist
 ```bash
 python experiments/run_all.py --sample   # 300-person extract shipped in the repo, about a minute
 python experiments/run_all.py            # all {S['people']:,} people: downloads ANSUR II once, checks SHA-256
-pytest                                   # geometry, thickness, stiffness, export, sizing and model tests
+pytest                                   # geometry, thickness, stiffness, scan, batch, Grasshopper, dashboard
 python tools/figures.py && python tools/banner.py
 ```
 
@@ -141,14 +183,15 @@ verified by SHA-256 (`ortholab/config.py`). Lengths in mm.
 
 * **No physical prototype yet.** Every result here is computed. The [bench test protocol](docs/test_protocol.md) says
   what to print and measure first, and what result would prove the model wrong.
-* **Shape from measurements, not scans.** Ellipses capture girths and breadths, not bony landmarks or the arch. Some
-  heights (minimum ankle girth, calf girth, below-knee girth) are assumptions listed in the design notes. A scan-based
-  shape would replace the limb profile and keep the rest of the pipeline.
+* **Shape from measurements by default.** Ellipses capture girths and breadths, not bony landmarks or the arch. Some
+  heights (minimum ankle girth, calf girth, below-knee girth) are assumptions listed in the design notes. The scan
+  input removes them for the leg, but it has only been tested on synthetic scans; a real scan first needs cleaning
+  and alignment to the sole, heel-back frame.
 * **Stiffness is a beam model.** It ranks designs and people; it is not FEA and gives no absolute stiffness.
 * **Survey population.** ANSUR II measures US Army personnel aged about 17 to 58, healthy adults. Patients needing an AFO
   (children, elderly, swelling, deformity) will differ; the sizing gap is likely larger, not smaller.
 * **Tolerances are assumptions** about what liners and straps absorb; the study shows results across a range.
-* **Grasshopper**: the `.3dm` export is tested; running the generator inside Grasshopper is not.
+* **Grasshopper**: the component and the `.3dm` export are tested outside Rhino; running inside Grasshopper is not.
 
 ## Résumé en français
 
@@ -156,7 +199,9 @@ Générateur paramétrique d'orthèse cheville-pied : à partir de neuf mesures,
 (épaisseur, orientation, volume d'impression) et exportée en STL, 3MF et pour Rhino. Testé sur les mesures réelles de
 {S['people']:,} personnes : 4 tailles standard n'en ajustent que {pct(S['sizing_4_foot_length_sizes'])}, les longueurs se prédisent mais
 les tours de cheville et de mollet doivent être mesurés, et l'épaisseur doit aller de {lo:.1f} à {hi:.1f} mm pour une même
-rigidité. Aucun prototype physique n'est encore testé : le protocole d'essai est dans `docs/test_protocol.md`.
+rigidité. Le générateur accepte aussi un scan de jambe, produit des lots de patients en ligne de commande avec un
+rapport de contrôle, et s'utilise depuis Grasshopper. Aucun prototype physique n'est encore testé : le protocole
+d'essai est dans `docs/test_protocol.md`.
 
 ## Licence
 

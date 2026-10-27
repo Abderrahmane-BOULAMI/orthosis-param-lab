@@ -59,10 +59,21 @@ def best_orientation(mesh, bed=BED_MM):
 
 
 def wall_thickness(mesh, n=400, seed=0):
-    """Thickness sampled by casting rays inwards from random surface points (ignores the open top/bottom caps)."""
+    """Wall thickness sampled by casting rays inwards from random points of the shell's outer and inner skins.
+
+    Only faces whose normal points across the wall (radial to the leg) are sampled, so the edges of
+    ventilation openings and the top and bottom cuts do not count as thin walls.
+    """
     pts, fid = trimesh.sample.sample_surface(mesh, n, seed=seed)
     normals = mesh.face_normals[fid]
-    keep = np.abs(normals[:, 2]) < 0.7          # side walls only
+    keep = np.abs(normals[:, 2]) < 0.7
+    prof = mesh.metadata.get("profile")
+    if prof is not None:
+        t = mesh.metadata.get("params", {}).get("thickness", 0.0)
+        _, b = prof.at(np.maximum(pts[:, 2] - t, 0.0))
+        radial = np.column_stack([pts[:, 0], pts[:, 1] - b, np.zeros(len(pts))])
+        radial /= np.linalg.norm(radial, axis=1, keepdims=True) + 1e-9
+        keep &= np.abs((normals * radial).sum(axis=1)) > 0.8
     pts, normals = pts[keep], normals[keep]
     origins = pts - normals * 1e-3
     locs, idx, _ = mesh.ray.intersects_location(origins, -normals, multiple_hits=False)

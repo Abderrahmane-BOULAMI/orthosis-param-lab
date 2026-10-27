@@ -4,3 +4,4 @@ data/raw/
 .pytest_cache/
 results/run_full.log
 docs/figures/sample/
+outputs/batch/

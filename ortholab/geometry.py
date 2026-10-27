@@ -92,8 +92,8 @@ def _levels(prof, n):
     return u * prof.z_top
 
 
-def shell_mesh(m, p=DESIGN):
-    prof = limb_profile(m, p)
+def shell_mesh(m, p=DESIGN, prof=None):
+    prof = prof or limb_profile(m, p)
     t, cl, M = p["thickness"], p["clearance"], p["arc_points"]
     zs = _levels(prof, p["levels"])
     a_z, b_z = prof.at(np.maximum(zs - t, 0.0))   # the foot rests on the plate, so the limb starts at z = t
@@ -170,10 +170,13 @@ def vents(m, prof, p):
     return trimesh.util.concatenate(cuts)
 
 
-def build_afo(m, p=None):
-    """Watertight AFO mesh for one person (dict-like of measurements in mm)."""
+def build_afo(m, p=None, profile=None):
+    """Watertight AFO mesh for one person (dict-like of measurements in mm).
+
+    profile: optional LimbProfile, for instance from a 3D scan (see ortholab.scan); the footplate still uses m.
+    """
     p = {**DESIGN, **(p or {})}
-    shell, prof = shell_mesh(m, p)
+    shell, prof = shell_mesh(m, p, profile)
     plate = plate_mesh(m, p)
     afo = trimesh.boolean.union([shell, plate], engine="manifold")
     cut = vents(m, prof, p)
