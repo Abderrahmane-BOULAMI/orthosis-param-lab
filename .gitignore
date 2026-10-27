@@ -5,3 +5,4 @@ data/raw/
 results/run_full.log
 docs/figures/sample/
 outputs/batch/
+patients.csv
