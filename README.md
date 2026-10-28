@@ -211,16 +211,22 @@ Data: ANSUR II public working databases (US Army anthropometric survey, 2012; or
 [openlab.psu.edu/ansur2](https://www.openlab.psu.edu/ansur2/)), pulled from a GitHub mirror pinned to one commit and
 verified by SHA-256 (`ortholab/config.py`). Lengths in mm.
 
-## Next steps
+## Roadmap: toward a bio-inspired orthosis
 
-* **Print and test.** The [bench test protocol](docs/test_protocol.md) lists the first prints (foot segments on a
-  Bambu Lab, cuff on a large-format printer), the hinge, stop and roll-over measurements, and the pass criteria.
-* **Real scans.** The scan input runs on synthetic scans; the next step is a cleaned clinical scan aligned to the
-  sole and heel frame.
-* **Finite elements.** The beam model ranks designs and people; an FEA run on the exported parts would give absolute
-  stiffness and stress at the hinges.
-* **Patient populations.** ANSUR II covers healthy adults; children and patients with swelling or deformity are the
-  next datasets to add.
+The generator already produces the skeleton of a bio-inspired orthosis: anatomical joint axes, one part per bone
+group, measured ranges of motion. The next versions build on that same parametric chain.
+
+| Next step | What it adds | Builds on |
+|---|---|---|
+| **Print and bench test** | First prints (foot segments on a Bambu Lab, cuff on a large-format printer), hinge, stop and roll-over measured against the [test protocol](docs/test_protocol.md) | exported 3MF and joint JSON |
+| **Spring-assisted ankle** | Torsion springs on the ankle pins to lift the foot in swing (drop foot), stiffness sized per person | ankle axis, stiffness model |
+| **Adjustable stop pins** | Range of motion set with interchangeable pins instead of a fixed printed stop | bisection-sized plantar stop |
+| **Plantar fascia cable** | A tension cable from heel to toes that tightens as the toes lift (windlass mechanism), stiffening the arch at push-off | MTP axis and segment chain |
+| **Ray-segmented forefoot** | Forefoot and toes split along the metatarsal rays, so the sole follows uneven ground | oblique MTP line, segment cutting |
+| **Compliant joints** | Printed flexures in TPU in place of pins for the midfoot joints | V-notch range design |
+| **Finite elements** | Stresses in hinges, knuckles and cuff under ground reaction forces through the gait cycle | exported meshes |
+| **Clinical inputs** | Cleaned clinical scans aligned to the sole and heel frame; children and patients with swelling or deformity | scan input, ANSUR study |
+| **Comfort** | Padded liner offsets and ratchet strap mounts generated with the shell | clearance and strap slots |
 
 ## Résumé en français
 
