@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ortholab import articulated as ar, assistant, data, export, geometry, mechanics, printability as pr, scan, sizing  # noqa: E402
 from ortholab.config import DESIGN, MEASURES, OUTPUTS, RESULTS  # noqa: E402
 
+REUSE_SEGMENTED = False
+REUSE_POPULATION = False
 BEDS = {"desktop": (250.0, 210.0, 220.0), "large": (400.0, 400.0, 400.0)}
 
 
@@ -55,8 +57,13 @@ def one_person(row):
 
 
 def population(df, workers=2):
-    with Pool(workers) as pool:
-        rows = pool.map(one_person, [r for _, r in df.iterrows()], chunksize=20)
+    rows = []
+    # fresh workers every 100 people keep memory flat over the 6,068 builds
+    with Pool(workers, maxtasksperchild=100) as pool:
+        for k, row in enumerate(pool.imap(one_person, [r for _, r in df.iterrows()], chunksize=10), 1):
+            rows.append(row)
+            if k % 500 == 0:
+                print(f"population: {k}/{len(df)}", flush=True)
     pop = pd.DataFrame(rows)
     target = pop["ankle_I_mm4"].median()
     pop["thickness_equal_stiffness"] = [mechanics.thickness_for({k: float(r[k]) for k in MEASURES}, target)
@@ -92,18 +99,21 @@ def stress_test(df):
     return pd.DataFrame(rows)
 
 
-def plantar_stop_study(df, n=120, targets=(0.0, 5.0, 10.0), seed=3):
+def _stop_case(args):
+    r, tgt = args
+    m = {k: float(r[k]) for k in MEASURES}
+    P = ar.build_articulated(m, {"plantar_stop_deg": tgt})
+    rom = ar.range_of_motion_fast(P, tol_deg=0.25)
+    return {"subjectid": r["subjectid"], "target_deg": tgt, "reached_deg": rom["plantarflexion_deg"],
+            "rest_overlap_mm3": rom["rest_overlap_mm3"], "watertight": bool(P["upper"].is_watertight)}
+
+
+def plantar_stop_study(df, n=120, targets=(0.0, 5.0, 10.0), seed=3, workers=2):
     """Size the posterior stop for each target on a sample of people and measure the angle actually reached."""
     s = df.sample(n, random_state=seed) if len(df) > n else df
-    rows = []
-    for _, r in s.iterrows():
-        m = {k: float(r[k]) for k in MEASURES}
-        for tgt in targets:
-            P = ar.build_articulated(m, {"plantar_stop_deg": tgt})
-            rom = ar.range_of_motion_fast(P, tol_deg=0.25)
-            rows.append({"subjectid": r["subjectid"], "target_deg": tgt, "reached_deg": rom["plantarflexion_deg"],
-                         "rest_overlap_mm3": rom["rest_overlap_mm3"], "watertight": bool(P["upper"].is_watertight)})
-    return pd.DataFrame(rows)
+    cases = [(r, t) for _, r in s.iterrows() for t in targets]
+    with Pool(workers, maxtasksperchild=20) as pool:
+        return pd.DataFrame(pool.map(_stop_case, cases, chunksize=2))
 
 
 def trimline_curve(m):
@@ -133,8 +143,12 @@ def main(sample):
     df = data.load(sample=sample)
     t0 = time.time()
 
-    pop, target_I = population(df)
-    pop.to_csv(out / "population.csv", index=False)
+    if REUSE_POPULATION and (out / "population.csv").exists():
+        pop = pd.read_csv(out / "population.csv")          # written by an earlier run of this script
+        target_I = pop["ankle_I_mm4"].median()
+    else:
+        pop, target_I = population(df)
+        pop.to_csv(out / "population.csv", index=False)
     stress = stress_test(df)
     stress.to_csv(out / "stress_test.csv", index=False)
 
@@ -213,8 +227,11 @@ def main(sample):
         "runtime_s": round(time.time() - t0, 1),
     }
     from segmented_study import study as seg_study, summarise as seg_summary
-    seg = seg_study(df, n=20 if sample else 150)
-    seg.to_csv(out / "segmented.csv", index=False)
+    if REUSE_SEGMENTED and (out / "segmented.csv").exists():
+        seg = pd.read_csv(out / "segmented.csv")             # same code, already run by segmented_study.py
+    else:
+        seg = seg_study(df, n=20 if sample else 150)
+        seg.to_csv(out / "segmented.csv", index=False)
     summary.update(seg_summary(seg))
     summary["runtime_s"] = round(time.time() - t0, 1)
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
@@ -224,4 +241,10 @@ def main(sample):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", action="store_true")
-    main(ap.parse_args().sample)
+    ap.add_argument("--reuse-segmented", action="store_true",
+                    help="read results/segmented.csv written by experiments/segmented_study.py instead of rebuilding")
+    ap.add_argument("--reuse-population", action="store_true", help="read results/population.csv from an earlier run")
+    a = ap.parse_args()
+    REUSE_SEGMENTED = a.reuse_segmented
+    REUSE_POPULATION = a.reuse_population
+    main(a.sample)

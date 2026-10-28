@@ -19,7 +19,26 @@
     "calf_ratio": 1.15,
     "plate_length": 0.95,
     "vent_rows": 4,
-    "levels": 36,
-    "arc_points": 48
+    "levels": 56,
+    "arc_points": 64,
+    "side": "right",
+    "heel_radius": 12.0,
+    "heel_bulge": 3.0,
+    "achilles_inset": 9.0,
+    "medial_offset": 10.0,
+    "malleolus_relief": 3.0,
+    "arch_height": 6.0,
+    "wall_height": 14.0,
+    "hinge_radius": 16.0,
+    "pin_diameter": 5.3,
+    "print_gap": 0.4,
+    "chopart_at": 0.34,
+    "metatarsal_length": 0.24,
+    "mtp_obliquity": 20.0,
+    "midfoot_range": 10.0,
+    "mtp_range": 40.0,
+    "foot_knuckle_radius": 6.0,
+    "foot_pin_diameter": 3.2,
+    "strap_slots": true
   }
 }

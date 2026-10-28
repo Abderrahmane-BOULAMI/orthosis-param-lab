@@ -1,30 +1,30 @@
 {
   "people": 6068,
   "watertight_share": 1.0,
-  "gen_seconds_median": 0.0732576450001261,
-  "volume_cm3_median": 295.6722803090903,
+  "gen_seconds_median": 0.2491759224994894,
+  "volume_cm3_median": 312.4440524013189,
   "mass_petg_g_p05_p95": [
-    308.5380147568688,
-    446.76930927678524
+    325.1461095373394,
+    471.0704559159593
   ],
   "height_mm_p05_p95": [
     371.0,
     467.0
   ],
   "fits_desktop_share": 0.0,
-  "fits_large_share": 0.7738958470665788,
+  "fits_large_share": 0.7735662491760052,
   "min_cube_mm_p50_p95": [
-    382.08599916435674,
-    420.8661957192565
+    382.1001672489522,
+    420.88135482798907
   ],
   "large_bed_orientation_counts": {
-    "on_back": 2976,
+    "on_back": 2974,
     "standing": 1720,
-    "NaN": 1372
+    "NaN": 1374
   },
-  "stress_cases": 75,
+  "stress_cases": 105,
   "stress_watertight_share": 1.0,
-  "stress_wall_p05_min_ratio": 0.9733633102280783,
+  "stress_wall_p05_min_ratio": 0.7434013719699628,
   "ankle_I_p95_over_p05": 1.8485782230305337,
   "ankle_I_max_over_min": 5.238346914262861,
   "equal_stiffness_thickness_p05_p95": [
@@ -69,17 +69,33 @@
     "A_quick_only": 0.3098220171390903,
     "B_quick_plus_two_girths": 0.6466710613052077
   },
+  "art_watertight_share": 1.0,
+  "art_rest_overlap_max_mm3": 0.0,
+  "art_dorsi_free_min_deg": 50.0,
+  "art_plantar_free_p05_p50_min": [
+    30.5,
+    34.4,
+    26.6
+  ],
+  "art_lower_fits_desktop_share": 0.9421555702043507,
+  "art_upper_fits_large_share": 1.0,
+  "art_gen_seconds_median": 0.8920790734996444,
+  "art_mass_petg_g_median": 406.8292425461803,
+  "plantar_stop_people": 60,
+  "plantar_stop_abs_err_max_deg": 0.6,
+  "plantar_stop_abs_err_mean_deg": 0.2822222222222219,
+  "plantar_stop_watertight_share": 1.0,
   "scan_fit_gap_min_mm": {
     "scan": 2.96,
-    "tape": -1.94
+    "tape": -2.5
   },
   "scan_fit_gap_median_mm": {
-    "scan": 3.0,
-    "tape": 2.54
+    "scan": 3.02,
+    "tape": 1.72
   },
   "scan_fit_pressing_share": {
     "scan": 0.0,
-    "tape": 0.114
+    "tape": 0.171
   },
   "median_person": {
     "foot_length": 264.0,
@@ -92,5 +108,23 @@
     "bimalleolar_breadth": 72.0,
     "tibial_height": 457.0
   },
-  "runtime_s": 1136.1
+  "runtime_s": 6010.5,
+  "seg_people": 150,
+  "seg_closed_share": 1.0,
+  "seg_fit_desktop_share": 1.0,
+  "seg_rest_overlap_max_mm3": 0.0,
+  "seg_range_abs_err_max_deg": 0.7999999999999972,
+  "seg_dorsi_median_deg": {
+    "chopart": 10.3,
+    "lisfranc": 10.3,
+    "mtp": 40.5
+  },
+  "seg_range_deg": {
+    "chopart": 10.0,
+    "lisfranc": 10.0,
+    "mtp": 40.0
+  },
+  "seg_locked_max_deg": 2.6,
+  "seg_gen_seconds_median": 15.80330193599957,
+  "seg_mass_petg_g_median": 430.3128144722234
 }

@@ -1,0 +1,73 @@
+{
+  "measures": {
+    "foot_length": 264.0,
+    "foot_breadth": 99.0,
+    "heel_breadth": 72.0,
+    "ball_length": 196.0,
+    "ankle_circ": 228.0,
+    "calf_circ": 390.0,
+    "malleolus_height": 70.0,
+    "bimalleolar_breadth": 72.0,
+    "tibial_height": 457.0
+  },
+  "ankle_axis_point_mm": [
+    0.0,
+    43.3,
+    78.0
+  ],
+  "ankle_axis_direction": [
+    1,
+    0,
+    0
+  ],
+  "pin": "M5 screw and nyloc nut, one per side",
+  "hinge_radius_mm": 16.0,
+  "print_gap_mm": 0.4,
+  "foot_joints": [
+    {
+      "name": "chopart",
+      "axis_point_mm": [
+        0.0,
+        89.76,
+        9.0
+      ],
+      "axis_direction": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "dorsiflexion_range_deg": 10.0,
+      "pin": "M3 screw and nyloc nut, one per side"
+    },
+    {
+      "name": "lisfranc",
+      "axis_point_mm": [
+        0.0,
+        132.64,
+        9.0
+      ],
+      "axis_direction": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "dorsiflexion_range_deg": 10.0,
+      "pin": "M3 screw and nyloc nut, one per side"
+    },
+    {
+      "name": "mtp",
+      "axis_point_mm": [
+        0.0,
+        186.99,
+        9.0
+      ],
+      "axis_direction": [
+        0.9397,
+        -0.342,
+        0.0
+      ],
+      "dorsiflexion_range_deg": 40.0,
+      "pin": "M3 screw and nyloc nut, one per side"
+    }
+  ]
+}

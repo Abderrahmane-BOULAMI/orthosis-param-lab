@@ -19,6 +19,7 @@ def main():
         page = b.new_page(viewport={"width": 1440, "height": 1250}, device_scale_factor=1)
         page.goto(URL, wait_until="networkidle")
         page.wait_for_selector("text=Orthosis Param Lab", timeout=120_000)
+        page.wait_for_selector(".js-plotly-plot", timeout=600_000)      # the first build can take a while
         time.sleep(8)
         for tab, name in TABS:
             page.get_by_role("tab", name=tab).click()

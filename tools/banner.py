@@ -28,11 +28,12 @@ def stats():
     ]
 
 
-def compose(W, H, path, hero_h, title_size, pad, stack=False):
+def compose(W, H, path, hero_h, title_size, pad, stack=False, hero_w=None):
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
     hero = Image.open(FIG / "hero.png")
-    s = hero_h / hero.height
+    s = min(hero_h / hero.height, (hero_w or 10**6) / hero.width)
+    hero_h = int(hero.height * s)
     hero = hero.resize((int(hero.width * s), hero_h), Image.LANCZOS)
     if stack:   # square visual: hero bottom right, text top left
         img.paste(hero, ((W - hero.width) // 2, H - hero_h - int(pad * 1.6)), hero)
@@ -56,6 +57,6 @@ def compose(W, H, path, hero_h, title_size, pad, stack=False):
 
 
 if __name__ == "__main__":
-    compose(1600, 640, FIG / "banner.png", hero_h=560, title_size=62, pad=56)
-    compose(1200, 1200, FIG / "linkedin.png", hero_h=560, title_size=58, pad=60, stack=True)
+    compose(1600, 640, FIG / "banner.png", hero_h=560, title_size=62, pad=56, hero_w=760)
+    compose(1200, 1200, FIG / "linkedin.png", hero_h=620, title_size=58, pad=60, stack=True, hero_w=1080)
     print("banner and LinkedIn visual written")
