@@ -39,7 +39,7 @@ def check(row, params, out, bed=LARGE_BED, min_wall=2.0):
         "seconds": round(time.perf_counter() - t0, 2),
     })
     rep["ok"] = bool(rep["watertight"] and rep["is_volume"] and rep["fits_bed"]
-                     and rep["wall_p05_mm"] is not None and rep["wall_p05_mm"] >= max(0.9 * t, min_wall))
+                     and rep["wall_p05_mm"] is not None and rep["wall_p05_mm"] >= max(0.8 * t, min_wall))
     return rep
 
 

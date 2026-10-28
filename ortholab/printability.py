@@ -61,10 +61,20 @@ def best_orientation(mesh, bed=BED_MM):
 def wall_thickness(mesh, n=400, seed=0):
     """Wall thickness sampled by casting rays inwards from random points of the shell's outer and inner skins.
 
-    Only faces whose normal points across the wall (radial to the leg) are sampled, so the edges of
-    ventilation openings and the top and bottom cuts do not count as thin walls.
+    Only faces whose normal points across the wall (radial to the leg) are sampled, and points closer than
+    1.5 wall thicknesses to a sharp edge (vent openings, trimlines, cuts) are skipped: a ray started there
+    grazes the edge and reads a wall thinner than the one that was built.
     """
     pts, fid = trimesh.sample.sample_surface(mesh, n, seed=seed)
+    sharp = mesh.face_adjacency_edges[mesh.face_adjacency_angles > np.radians(45.0)]
+    if len(sharp):
+        from scipy.spatial import cKDTree
+        a, b = mesh.vertices[sharp[:, 0]], mesh.vertices[sharp[:, 1]]
+        ts = np.linspace(0.0, 1.0, 5)[:, None, None]
+        edge_pts = (a[None] * (1 - ts) + b[None] * ts).reshape(-1, 3)
+        t_nom = float(mesh.metadata.get("params", {}).get("thickness", 3.0))
+        near = cKDTree(edge_pts).query(pts, distance_upper_bound=1.5 * t_nom)[0] < np.inf
+        pts, fid = pts[~near], fid[~near]
     normals = mesh.face_normals[fid]
     keep = np.abs(normals[:, 2]) < 0.7
     prof = mesh.metadata.get("profile")
