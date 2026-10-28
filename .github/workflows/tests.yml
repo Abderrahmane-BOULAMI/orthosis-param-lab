@@ -16,4 +16,5 @@ jobs:
         run: |
           python -m ortholab.cli template patients.csv
           python -m ortholab.cli batch patients.csv --out outputs/batch --vent-rows 4
+          python -m ortholab.cli batch patients.csv --out outputs/segmented --segmented --plantar-stop 5
       - run: pytest

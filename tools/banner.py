@@ -7,7 +7,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 FIG = ROOT / "docs" / "figures"
-S = json.loads((ROOT / "results" / "summary.json").read_text())
+import os
+S = json.loads((ROOT / "results" / ("sample" if os.environ.get("ORTHO_SAMPLE") else "") / "summary.json").read_text())
+FIG = FIG / "sample" if os.environ.get("ORTHO_SAMPLE") else FIG
 
 TEAL, INK, MUTED, BG, RUST = "#00909C", "#14213D", "#5B6675", "#F4F8F9", "#C2410C"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
@@ -20,9 +22,9 @@ def font(size, bold=False):
 
 def stats():
     return [
-        (f"{S['people']:,}", "orthoses generated from\nreal body measurements"),
-        (f"{S['watertight_share'] * 100:.0f} %", "closed, printable solids\n(watertight, checked)"),
-        (f"{S['sizing_4_foot_length_sizes'] * 100:.0f} %", "of people fit 4 standard\nsizes within tolerance"),
+        (f"{S['people']:,}", "articulated orthoses generated\nfrom real body measurements"),
+        (f"{S['art_watertight_share'] * 100:.0f} %", "closed parts, hinge free,\nzero overlap at rest"),
+        ("4 + 1", "printed bone segments and cuff,\nevery joint checked on the meshes"),
     ]
 
 
@@ -41,14 +43,14 @@ def compose(W, H, path, hero_h, title_size, pad, stack=False):
     y += int(title_size * 0.7)
     d.text((x, y), "Orthosis Param Lab", font=font(title_size, True), fill=INK)
     y += int(title_size * 1.25)
-    d.text((x, y), "A printable ankle-foot orthosis from nine body\nmeasurements, checked before it reaches the printer.",
+    d.text((x, y), "An articulated ankle-foot orthosis, one printed part\nper bone group, from nine body measurements.",
            font=font(int(title_size * 0.42)), fill=MUTED, spacing=8)
     y += int(title_size * 1.45)
     for big, small in stats():
         d.text((x, y), big, font=font(int(title_size * 0.75), True), fill=TEAL)
         d.text((x + int(title_size * 2.6), y + 4), small, font=font(int(title_size * 0.32)), fill=INK, spacing=4)
         y += int(title_size * 1.05)
-    d.text((x, H - pad - int(title_size * 0.35)), "Python · trimesh · Manifold · Rhino .3dm · scikit-learn · Streamlit",
+    d.text((x, H - pad - int(title_size * 0.35)), "Python · trimesh · Manifold · Rhino · Grasshopper · LightGBM · Streamlit",
            font=font(int(title_size * 0.3)), fill=MUTED)
     img.save(path)
 

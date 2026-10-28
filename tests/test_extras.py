@@ -52,6 +52,11 @@ def test_batch_command(tmp_path):
     assert len(rep) == 3 and rep["ok"].all()
     assert (tmp_path / "out" / "afo_P001.3dm").exists() and (tmp_path / "out" / "afo_P003.stl").exists()
     assert cli.main(["batch", str(csv), "--out", str(tmp_path / "thin"), "--thickness", "1.5"]) == 1
+    assert cli.main(["batch", str(csv), "--out", str(tmp_path / "art"), "--articulated", "--plantar-stop", "5"]) == 0
+    assert cli.main(["batch", str(csv), "--out", str(tmp_path / "seg"), "--segmented", "--plantar-stop", "5"]) == 0
+    assert (tmp_path / "seg" / "afo_P001_foot_toes.stl").exists()
+    rep = pd.read_csv(tmp_path / "art" / "report.csv")
+    assert rep["ok"].all() and (rep["plantarflexion_stop_deg"] - 5).abs().max() <= 1.0
 
 
 def test_batch_rejects_missing_columns(tmp_path):
@@ -66,8 +71,12 @@ def test_grasshopper_component_outside_rhino(person):
     ghc = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ghc)
     text = ", ".join(f"{k}={v}" for k, v in person.items())
-    mesh, report = ghc.run(str(ROOT), text, thickness=3.0, vent_rows=2)
-    assert mesh.Faces.Count > 1000 and "watertight: True" in report
+    mesh, cuff, report = ghc.run(str(ROOT), text, thickness=3.0, vent_rows=2)
+    assert mesh.Faces.Count > 1000 and cuff is None and "watertight: True" in report
+    foot, cuff, report = ghc.run(str(ROOT), text, articulated=True, plantar_stop=5.0)
+    assert foot.Faces.Count > 1000 and cuff.Faces.Count > 1000 and "plantarflexion stop" in report
+    foot, cuff, report = ghc.run(str(ROOT), text, plantar_stop=5.0, segments=True)
+    assert len(foot) == 4 and all(f.Faces.Count > 100 for f in foot) and "mtp: opens" in report
 
 
 def test_dashboard_runs():

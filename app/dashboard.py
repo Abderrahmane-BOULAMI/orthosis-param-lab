@@ -12,7 +12,7 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from ortholab import data, export, geometry, mechanics, printability as pr  # noqa: E402
+from ortholab import articulated as ar, data, export, geometry, mechanics, printability as pr, segmented as sg  # noqa: E402
 from ortholab.config import DENSITY, DESIGN, MEASURES  # noqa: E402
 
 TEAL, INK, SOFT, RUST, GREY = "#00909C", "#14213D", "#E6F4F5", "#C2410C", "#8A96A3"
@@ -58,12 +58,31 @@ def build(meas, params):
     return geometry.build_afo(dict(meas), dict(params))
 
 
-def mesh_figure(mesh, height=520):
-    v, f = mesh.vertices, mesh.faces
-    fig = go.Figure(go.Mesh3d(x=v[:, 0], y=v[:, 1], z=v[:, 2], i=f[:, 0], j=f[:, 1], k=f[:, 2],
-                              color=TEAL, opacity=1.0, flatshading=False,
-                              lighting=dict(ambient=0.45, diffuse=0.8, specular=0.25, roughness=0.6),
-                              lightposition=dict(x=200, y=-300, z=500)))
+@st.cache_resource
+def build_art(meas, params):
+    P = ar.build_articulated(dict(meas), dict(params))
+    return P, ar.range_of_motion_fast(P)
+
+
+@st.cache_resource
+def build_seg(meas, params):
+    P = sg.build_segmented(dict(meas), dict(params))
+    return P, ar.range_of_motion_fast(P), sg.joint_motion(P)
+
+
+NAVY = "#335C9E"
+SEG_HEX = {"hindfoot": TEAL, "midfoot": "#E3A33B", "forefoot": "#D9644A", "toes": "#7E6BB5"}
+
+
+def mesh_figure(mesh, height=520, extra=()):
+    traces = []
+    for m_, col in [(mesh, TEAL), *extra]:
+        v, f = m_.vertices, m_.faces
+        traces.append(go.Mesh3d(x=v[:, 0], y=v[:, 1], z=v[:, 2], i=f[:, 0], j=f[:, 1], k=f[:, 2],
+                                color=col, opacity=1.0, flatshading=False,
+                                lighting=dict(ambient=0.45, diffuse=0.8, specular=0.25, roughness=0.6),
+                                lightposition=dict(x=200, y=-300, z=500)))
+    fig = go.Figure(traces)
     fig.update_layout(scene=dict(aspectmode="data", xaxis_visible=False, yaxis_visible=False, zaxis_visible=False,
                                  camera=dict(eye=dict(x=2.1, y=-1.9, z=1.0))),
                       margin=dict(l=0, r=0, t=0, b=0), height=height, paper_bgcolor="white")
@@ -75,7 +94,8 @@ summ, pop, cov, tol, asst, trim, stress = results()
 
 st.markdown('<div class="kicker">MedTech · Computational design · 3D printing</div>', unsafe_allow_html=True)
 st.title("Orthosis Param Lab")
-st.caption(f"A printable ankle-foot orthosis generated from nine body measurements, checked before printing. "
+st.caption(f"An articulated ankle-foot orthosis generated from nine body measurements, one printed part per bone group, "
+           f"checked before printing. "
            f"Body data: {source}. Every shape assumption is listed in the README.")
 
 tab_design, tab_fit, tab_assist, tab_pop = st.tabs(
@@ -93,36 +113,121 @@ with tab_design:
             med = people[MEASURES].median()
             meas = {k: float(st.number_input(LABELS[k], value=float(med[k]), step=1.0)) for k in MEASURES}
         st.markdown("**Design parameters**")
+        build_mode = st.radio("Build", ["Bone segments", "Two parts", "One piece"], horizontal=True,
+                              help="Bone segments: hindfoot, midfoot, forefoot and toes, pinned at the Chopart, Lisfranc "
+                                   "and MTP joints, plus the ankle hinge. Two parts: foot section and calf cuff hinged "
+                                   "at the ankle. One piece: rigid AFO.")
+        articulated = build_mode != "One piece"
+        segmented = build_mode == "Bone segments"
         params = {
             "thickness": st.slider("Shell thickness (mm)", 2.0, 6.0, DESIGN["thickness"], 0.5),
             "clearance": st.slider("Liner clearance (mm)", 0.0, 6.0, DESIGN["clearance"], 0.5),
-            "wrap_deg": st.slider("Leg wrap (deg)", 150, 240, int(DESIGN["wrap_deg"]), 10) * 1.0,
-            "ankle_wrap_deg": st.slider("Ankle trimline (deg, lower = more flexible)", 100, 240, 200, 10) * 1.0,
-            "vent_rows": st.slider("Ventilation rows", 0, 6, 4),
+            "malleolus_relief": st.slider("Malleolus relief (mm)", 0.0, 6.0, DESIGN["malleolus_relief"], 0.5),
+            "arch_height": st.slider("Arch support height (mm)", 0.0, 12.0, DESIGN["arch_height"], 1.0),
+            "vent_rows": st.slider("Ventilation rows", 0, 5, 3),
+            "side": st.radio("Leg", ["right", "left"], horizontal=True),
         }
-    afo = build(tuple(meas.items()), tuple(params.items()))
+        if articulated:
+            use_stop = st.checkbox("Plantarflexion stop (drop-foot setting)", value=True)
+            params["plantar_stop_deg"] = float(st.slider("Stop angle (deg)", 0, 20, 5)) if use_stop else None
+            angle = st.slider("Move the ankle: plantarflexion < 0 < dorsiflexion (deg)", -30, 30, 0)
+            if segmented:
+                params["mtp_range"] = float(st.slider("Toe joint (MTP) range (deg)", 20, 60, int(DESIGN["mtp_range"]), 5))
+                params["midfoot_range"] = float(st.slider("Chopart and Lisfranc range (deg)", 0, 20,
+                                                          int(DESIGN["midfoot_range"]), 2))
+                roll = st.slider("Roll over the toes (share of each foot joint's range)", 0.0, 1.0, 0.0, 0.1)
+        else:
+            params["ankle_wrap_deg"] = st.slider("Ankle trimline (deg, lower = more flexible)", 100, 240, 200, 10) * 1.0
     with right:
-        st.plotly_chart(mesh_figure(afo), use_container_width=True)
-        best = pr.best_orientation(afo, (400.0, 400.0, 400.0))
-        I = mechanics.ankle_inertia(meas, params)
-        c = st.columns(4)
-        c[0].metric("Mass, PETG", f"{afo.volume / 1000 * DENSITY['PETG']:.0f} g")
-        c[1].metric("Min. printer cube", f"{pr.min_cube_side(afo):.0f} mm")
-        c[2].metric("Orientation (400 mm)", best["orientation"].replace("_", " ") if best else "does not fit")
-        ref = summ.get("ankle_I_median", pop["ankle_I_mm4"].median() if pop is not None else I)
-        c[3].metric("Ankle stiffness", f"{I / ref:.2f}×")
-        st.caption("Stiffness is relative to the population median. Watertight: " + ("yes" if afo.is_watertight else "NO") +
-                   f" · {len(afo.faces):,} triangles · stiffness is a beam-model ranking, not a bench result.")
-        d1, d2, d3 = st.columns(3)
-        buf = io.BytesIO()
-        afo.export(buf, file_type="stl")
-        d1.download_button("Download STL", buf.getvalue(), "afo.stl", use_container_width=True)
-        buf3 = io.BytesIO()
-        afo.export(buf3, file_type="3mf")
-        d2.download_button("Download 3MF", buf3.getvalue(), "afo.3mf", use_container_width=True)
-        with tempfile.TemporaryDirectory() as tmp:
-            p = export.to_3dm(afo, Path(tmp) / "afo.3dm", meas, params)
-            d3.download_button("Download for Rhino (.3dm)", p.read_bytes(), "afo.3dm", use_container_width=True)
+        if segmented:
+            P, rom, motion = build_seg(tuple(meas.items()), tuple(params.items()))
+            stop = rom["plantarflexion_deg"]
+            shown = max(-stop, angle)
+            Q = sg.pose(P, [roll * r["range_deg"] for r in motion], ankle_deg=shown)
+            extra = [(Q[k], SEG_HEX[k]) for k in ("midfoot", "forefoot", "toes")]
+            extra += [(P["upper"], NAVY), (P["pins"], "#9AA0A6"), (Q["foot_pins"], "#9AA0A6")]
+            st.plotly_chart(mesh_figure(Q["hindfoot"], extra=extra), use_container_width=True)
+            segs = P["segments"]
+            c = st.columns(4)
+            c[0].metric("Mass, PETG", f"{(sum(v.volume for v in segs.values()) + P['upper'].volume) / 1000 * DENSITY['PETG']:.0f} g")
+            c[1].metric("Plantarflexion stop", f"{stop:.1f}°")
+            mtp = [r for r in motion if r["joint"] == "mtp"][0]
+            c[2].metric("Toe joint opens to", f"{mtp['dorsiflexion_deg']:.0f}°")
+            fits = all(pr.best_orientation(v, (250.0, 210.0, 220.0)) is not None for v in segs.values())
+            c[3].metric("Foot segments on a desktop printer", "all fit" if fits else "check")
+            st.dataframe(pd.DataFrame([{"joint": {"chopart": "Chopart", "lisfranc": "Lisfranc", "mtp": "MTP"}[r["joint"]],
+                                        "designed range (°)": r["range_deg"], "measured opening (°)": r["dorsiflexion_deg"],
+                                        "locks under load at (°)": r["plantarflexion_deg"],
+                                        "overlap at rest (mm³)": round(r["rest_overlap_mm3"], 2)} for r in motion]),
+                         hide_index=True, use_container_width=True)
+            st.caption("Segments: hindfoot (calcaneus, talus), midfoot (navicular, cuboid, cuneiforms), forefoot "
+                       "(metatarsals), toes (phalanges). Every angle is measured by turning the parts about their axes "
+                       "on the real meshes." + (f" Ankle shown at {shown:.0f}° (held by the stop)." if shown != angle else ""))
+            cols = st.columns(3)
+            with tempfile.TemporaryDirectory() as tmp:
+                export.export_articulated(P, tmp, "afo", meas)
+                import zipfile
+                zbuf = io.BytesIO()
+                with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for f in sorted(Path(tmp).glob("afo_*.stl")):
+                        z.write(f, f.name)
+                cols[0].download_button("All parts, STL (zip)", zbuf.getvalue(), "afo_parts_stl.zip", use_container_width=True)
+                cols[1].download_button("Assembly 3MF", (Path(tmp) / "afo_assembly.3mf").read_bytes(), "afo_assembly.3mf",
+                                        use_container_width=True)
+                cols[2].download_button("Assembly for Rhino", (Path(tmp) / "afo_assembly.3dm").read_bytes(),
+                                        "afo_assembly.3dm", use_container_width=True)
+        elif articulated:
+            P, rom = build_art(tuple(meas.items()), tuple(params.items()))
+            stop = rom["plantarflexion_deg"]
+            shown = max(-stop, angle)                       # the stop holds the foot like the real part would
+            lower = ar.rotate_about_axis(P["lower"], P["joint"], shown)
+            st.plotly_chart(mesh_figure(lower, extra=[(P["upper"], NAVY), (P["pins"], "#9AA0A6")]),
+                            use_container_width=True)
+            c = st.columns(4)
+            c[0].metric("Mass, PETG", f"{(P['lower'].volume + P['upper'].volume) / 1000 * DENSITY['PETG']:.0f} g")
+            c[1].metric("Free dorsiflexion", f"{rom['dorsiflexion_deg']:.0f}°+" if rom["dorsiflexion_deg"] >= 50 else f"{rom['dorsiflexion_deg']:.0f}°")
+            c[2].metric("Plantarflexion stop", f"{stop:.1f}°")
+            fits = pr.best_orientation(P["lower"], (250.0, 210.0, 220.0)) is not None
+            c[3].metric("Foot section on a desktop printer", "fits" if fits else "too big")
+            st.caption(f"Both parts watertight: {'yes' if P['lower'].is_watertight and P['upper'].is_watertight else 'NO'}"
+                       f" · overlap at rest {rom['rest_overlap_mm3']:.2f} mm³ · motion limits measured by turning the foot"
+                       " section about the ankle axis on the real meshes."
+                       + (f" Shown at {shown:.0f}° (held by the stop)." if shown != angle else ""))
+            d1, d2, d3, d4 = st.columns(4)
+            for col, key, label, fname in ((d1, "lower", "Foot section STL", "foot_section.stl"),
+                                           (d2, "upper", "Calf cuff STL", "calf_cuff.stl")):
+                buf = io.BytesIO()
+                P[key].export(buf, file_type="stl")
+                col.download_button(label, buf.getvalue(), fname, use_container_width=True)
+            with tempfile.TemporaryDirectory() as tmp:
+                export.export_articulated(P, tmp, "afo", meas)
+                d3.download_button("Assembly 3MF", (Path(tmp) / "afo_assembly.3mf").read_bytes(), "afo_assembly.3mf",
+                                   use_container_width=True)
+                d4.download_button("Assembly for Rhino", (Path(tmp) / "afo_assembly.3dm").read_bytes(),
+                                   "afo_assembly.3dm", use_container_width=True)
+        else:
+            afo = build(tuple(meas.items()), tuple(params.items()))
+            st.plotly_chart(mesh_figure(afo), use_container_width=True)
+            best = pr.best_orientation(afo, (400.0, 400.0, 400.0))
+            I = mechanics.ankle_inertia(meas, params)
+            c = st.columns(4)
+            c[0].metric("Mass, PETG", f"{afo.volume / 1000 * DENSITY['PETG']:.0f} g")
+            c[1].metric("Min. printer cube", f"{pr.min_cube_side(afo):.0f} mm")
+            c[2].metric("Orientation (400 mm)", best["orientation"].replace("_", " ") if best else "does not fit")
+            ref = pop["ankle_I_mm4"].median() if pop is not None else I
+            c[3].metric("Ankle stiffness", f"{I / ref:.2f}×")
+            st.caption("Stiffness is relative to the population median. Watertight: " + ("yes" if afo.is_watertight else "NO") +
+                       f" · {len(afo.faces):,} triangles · stiffness is a beam-model ranking.")
+            d1, d2, d3 = st.columns(3)
+            buf = io.BytesIO()
+            afo.export(buf, file_type="stl")
+            d1.download_button("Download STL", buf.getvalue(), "afo.stl", use_container_width=True)
+            buf3 = io.BytesIO()
+            afo.export(buf3, file_type="3mf")
+            d2.download_button("Download 3MF", buf3.getvalue(), "afo.3mf", use_container_width=True)
+            with tempfile.TemporaryDirectory() as tmp:
+                p_ = export.to_3dm(afo, Path(tmp) / "afo.3dm", meas, params)
+                d3.download_button("Download for Rhino (.3dm)", p_.read_bytes(), "afo.3dm", use_container_width=True)
 
 with tab_fit:
     st.subheader("Standard sizes leave most people outside tolerance")
@@ -170,6 +275,20 @@ with tab_pop:
         c[1].metric("Watertight", f"{pop['watertight'].mean() * 100:.1f} %")
         c[2].metric("Median generation time", f"{pop['gen_s'].median() * 1000:.0f} ms")
         c[3].metric("Fit a 400 mm printer", f"{pop['fits_large'].mean() * 100:.0f} %")
+        if "art_watertight" in pop:
+            st.markdown("**Articulated version, every person**")
+            c = st.columns(4)
+            c[0].metric("Both parts closed and separate", f"{(pop['art_watertight'] & (pop['art_rest_overlap_mm3'] < 1)).mean() * 100:.1f} %")
+            c[1].metric("Free plantarflexion, median", f"{pop['art_plantar_free_deg'].median():.0f}°")
+            c[2].metric("Free dorsiflexion, minimum", f"{pop['art_dorsi_free_deg'].min():.0f}°")
+            c[3].metric("Foot section fits a desktop printer", f"{pop['art_lower_fits_desktop'].mean() * 100:.0f} %")
+        if summ.get("seg_people"):
+            st.markdown(f"**Bone segments, {summ['seg_people']} people drawn at random**")
+            c = st.columns(4)
+            c[0].metric("Every segment one closed part", f"{summ['seg_closed_share'] * 100:.0f} %")
+            c[1].metric("Joint range reached, worst error", f"{summ['seg_range_abs_err_max_deg']:.1f}°")
+            c[2].metric("Joints lock under load within", f"{summ['seg_locked_max_deg']:.1f}°")
+            c[3].metric("Every segment fits a desktop printer", f"{summ['seg_fit_desktop_share'] * 100:.0f} %")
         a, b = st.columns(2)
         h1 = go.Figure(go.Histogram(x=pop["min_cube_mm"], marker_color=TEAL, nbinsx=40))
         h1.add_vline(x=250, line_dash="dot", annotation_text="250 mm desktop")

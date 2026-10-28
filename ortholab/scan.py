@@ -16,8 +16,10 @@ def limb_surface(prof, z0, z1, levels=70, n=120, cap=True):
     """Closed tube following a limb profile: a stand-in for a scan, used for demos and tests."""
     zs = np.linspace(z0, z1, levels)
     a, b = prof.at(zs)
+    y0 = prof.back(zs)
     th = np.linspace(0, 2 * np.pi, n, endpoint=False)
-    rings = [np.column_stack([ai * np.cos(th), bi + bi * np.sin(th), np.full(n, z)]) for z, ai, bi in zip(zs, a, b)]
+    rings = [np.column_stack([ai * np.cos(th), yi + bi + bi * np.sin(th), np.full(n, z)])
+             for z, ai, bi, yi in zip(zs, a, b, y0)]
     V = np.vstack(rings)
     F = []
     for k in range(levels - 1):
@@ -38,21 +40,21 @@ def limb_surface(prof, z0, z1, levels=70, n=120, cap=True):
 
 
 def slice_scan(scan, heights):
-    """Width, depth and girth (mm) of the largest closed section at each height."""
+    """Width, depth, girth and back position y_min (mm) of the largest closed section at each height."""
     rows = []
     for z in heights:
         sec = scan.section(plane_origin=[0, 0, z], plane_normal=[0, 0, 1])
         if sec is None:
-            rows.append((z, np.nan, np.nan, np.nan))
+            rows.append((z, np.nan, np.nan, np.nan, np.nan))
             continue
         planar, T = sec.to_2D()
         polys = planar.polygons_full
         if not polys:
-            rows.append((z, np.nan, np.nan, np.nan))
+            rows.append((z, np.nan, np.nan, np.nan, np.nan))
             continue
         poly = max(polys, key=lambda q: q.area)
         pts3 = trimesh.transform_points(np.column_stack([np.array(poly.exterior.coords), np.zeros(len(poly.exterior.coords))]), T)
-        rows.append((z, np.ptp(pts3[:, 0]), np.ptp(pts3[:, 1]), poly.exterior.length))
+        rows.append((z, np.ptp(pts3[:, 0]), np.ptp(pts3[:, 1]), poly.exterior.length, pts3[:, 1].min()))
     return np.array(rows)
 
 
@@ -70,10 +72,13 @@ def profile_from_scan(scan, m, p=None, start_above_malleolus=25.0, step=8.0, top
     z = np.r_[base.z[keep], sl[:, 0]]
     a = np.r_[base.a[keep], sl[:, 1] / 2]
     b = np.r_[base.b[keep], sl[:, 2] / 2]
+    keep_y = base.zy < z_start
+    zy = np.r_[base.zy[keep_y], sl[:, 0]]
+    y0 = np.r_[base.y0[keep_y], sl[:, 4]]
     girth = sl[:, 3]
     lower = sl[:, 0] < z_start + 120
     z_ankle = float(sl[lower, 0][np.argmin(girth[lower])]) if lower.any() else base.z_ankle
-    prof = LimbProfile(z, a, b, z_ankle, float(sl[-1, 0]))
+    prof = LimbProfile(z, a, b, z_ankle, float(sl[-1, 0]), y0, zy)
     prof.girths = dict(zip(sl[:, 0].round(1), girth))
     return prof
 

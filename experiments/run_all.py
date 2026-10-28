@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ortholab import assistant, data, export, geometry, mechanics, printability as pr, scan, sizing  # noqa: E402
+from ortholab import articulated as ar, assistant, data, export, geometry, mechanics, printability as pr, scan, sizing  # noqa: E402
 from ortholab.config import DESIGN, MEASURES, OUTPUTS, RESULTS  # noqa: E402
 
 BEDS = {"desktop": (250.0, 210.0, 220.0), "large": (400.0, 400.0, 400.0)}
@@ -36,6 +36,21 @@ def one_person(row):
         out[f"support_{bed}_cm2"] = best["support_cm2"] if best else np.nan
     out["min_cube_mm"] = pr.min_cube_side(afo)
     out["ankle_I_mm4"] = mechanics.ankle_inertia(m)
+    # articulated version: two parts, hinge discs on the ankle axis
+    t1 = time.perf_counter()
+    P = ar.build_articulated(m)
+    rom = ar.range_of_motion_fast(P)
+    out.update({
+        "art_gen_s": time.perf_counter() - t1,
+        "art_watertight": bool(P["lower"].is_watertight and P["upper"].is_watertight
+                               and P["lower"].is_volume and P["upper"].is_volume),
+        "art_rest_overlap_mm3": rom["rest_overlap_mm3"],
+        "art_dorsi_free_deg": rom["dorsiflexion_deg"],
+        "art_plantar_free_deg": rom["plantarflexion_deg"],
+        "art_lower_fits_desktop": pr.best_orientation(P["lower"], BEDS["desktop"]) is not None,
+        "art_upper_fits_large": pr.best_orientation(P["upper"], BEDS["large"]) is not None,
+        "art_mass_petg_g": (P["lower"].volume + P["upper"].volume) / 1000 * 1.27,
+    })
     return out
 
 
@@ -60,6 +75,13 @@ def stress_test(df):
     rows = []
     for i in sorted(picks):
         m = {k: float(df.loc[i, k]) for k in MEASURES}
+        P = ar.build_articulated(m, {"plantar_stop_deg": 5.0, "vent_rows": 3})
+        for part in ("lower", "upper"):
+            w = pr.wall_thickness(P[part], n=300)
+            rows.append({"subjectid": df.loc[i, "subjectid"], "variant": f"articulated_{part}",
+                         "watertight": bool(P[part].is_watertight), "is_volume": bool(P[part].is_volume),
+                         "wall_p05": float(np.percentile(w, 5)), "wall_median": float(np.median(w)),
+                         "target_t": DESIGN["thickness"]})
         for name, p in variants.items():
             afo = geometry.build_afo(m, p)
             w = pr.wall_thickness(afo, n=300)
@@ -67,6 +89,20 @@ def stress_test(df):
             rows.append({"subjectid": df.loc[i, "subjectid"], "variant": name, "watertight": bool(afo.is_watertight),
                          "is_volume": bool(afo.is_volume), "wall_p05": float(np.percentile(w, 5)),
                          "wall_median": float(np.median(w)), "target_t": t})
+    return pd.DataFrame(rows)
+
+
+def plantar_stop_study(df, n=120, targets=(0.0, 5.0, 10.0), seed=3):
+    """Size the posterior stop for each target on a sample of people and measure the angle actually reached."""
+    s = df.sample(n, random_state=seed) if len(df) > n else df
+    rows = []
+    for _, r in s.iterrows():
+        m = {k: float(r[k]) for k in MEASURES}
+        for tgt in targets:
+            P = ar.build_articulated(m, {"plantar_stop_deg": tgt})
+            rom = ar.range_of_motion_fast(P, tol_deg=0.25)
+            rows.append({"subjectid": r["subjectid"], "target_deg": tgt, "reached_deg": rom["plantarflexion_deg"],
+                         "rest_overlap_mm3": rom["rest_overlap_mm3"], "watertight": bool(P["upper"].is_watertight)})
     return pd.DataFrame(rows)
 
 
@@ -115,6 +151,8 @@ def main(sample):
     trim = trimline_curve(median_person)
     trim.to_csv(out / "stiffness_trimline.csv", index=False)
 
+    stops = plantar_stop_study(df, n=20 if sample else 60)
+    stops.to_csv(out / "plantar_stop.csv", index=False)
     gaps = scan_study(median_person)
     gaps.to_csv(out / "scan_fit.csv", index=False)
     g = gaps.groupby("source")["gap_mm"]
@@ -122,6 +160,11 @@ def main(sample):
     if not sample:
         afo = geometry.build_afo(median_person, {"vent_rows": 4})
         export.export_all(afo, OUTPUTS, "afo_median_person", median_person, afo.metadata["params"])
+        P = ar.build_articulated(median_person, {"vent_rows": 3, "plantar_stop_deg": 5.0})
+        export.export_articulated(P, OUTPUTS, "afo_articulated_median_person", median_person)
+        from ortholab import segmented as sg
+        export.export_articulated(sg.build_segmented(median_person, {"vent_rows": 3, "plantar_stop_deg": 5.0}),
+                                  OUTPUTS, "afo_segmented_median_person", median_person)
 
     I = pop["ankle_I_mm4"]
     lgbm = maes[maes.model == "gradient boosting (LightGBM)"].set_index("target")
@@ -151,12 +194,29 @@ def main(sample):
         "assistant_lgbm_mae_mm": lgbm["mae_mm"].round(1).to_dict(),
         "assistant_lgbm_within_tol": lgbm["within_tol"].round(3).to_dict(),
         "protocol_all_within_tol": proto,
+        "art_watertight_share": float(pop["art_watertight"].mean()),
+        "art_rest_overlap_max_mm3": float(pop["art_rest_overlap_mm3"].max()),
+        "art_dorsi_free_min_deg": float(pop["art_dorsi_free_deg"].min()),
+        "art_plantar_free_p05_p50_min": [float(np.percentile(pop["art_plantar_free_deg"], q)) for q in (5, 50)] + [float(pop["art_plantar_free_deg"].min())],
+        "art_lower_fits_desktop_share": float(pop["art_lower_fits_desktop"].mean()),
+        "art_upper_fits_large_share": float(pop["art_upper_fits_large"].mean()),
+        "art_gen_seconds_median": float(pop["art_gen_s"].median()),
+        "art_mass_petg_g_median": float(pop["art_mass_petg_g"].median()),
+        "plantar_stop_people": int(stops["subjectid"].nunique()),
+        "plantar_stop_abs_err_max_deg": float((stops["reached_deg"] - stops["target_deg"]).abs().max()),
+        "plantar_stop_abs_err_mean_deg": float((stops["reached_deg"] - stops["target_deg"]).abs().mean()),
+        "plantar_stop_watertight_share": float(stops["watertight"].mean()),
         "scan_fit_gap_min_mm": g.min().round(2).to_dict(),
         "scan_fit_gap_median_mm": g.median().round(2).to_dict(),
         "scan_fit_pressing_share": gaps.assign(p=gaps.gap_mm < 0).groupby("source")["p"].mean().round(3).to_dict(),
         "median_person": median_person,
         "runtime_s": round(time.time() - t0, 1),
     }
+    from segmented_study import study as seg_study, summarise as seg_summary
+    seg = seg_study(df, n=20 if sample else 150)
+    seg.to_csv(out / "segmented.csv", index=False)
+    summary.update(seg_summary(seg))
+    summary["runtime_s"] = round(time.time() - t0, 1)
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
     print(json.dumps(summary, indent=2, default=str))
 

@@ -7,15 +7,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import trimesh  # noqa: E402
 import pandas as pd  # noqa: E402
 from PIL import Image  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
-from ortholab import data, geometry  # noqa: E402
+from ortholab import articulated as ar, data, geometry, segmented as sg  # noqa: E402
 from ortholab.config import FIGURES, MEASURES, RESULTS  # noqa: E402
-from render import draw, frame  # noqa: E402
+from render import BASE, NAVY, SEG_COLORS, STEEL, assembly, draw, draw_parts, frame  # noqa: E402
 
 TEAL, RUST, GREY, INK, MUTED = "#00909C", "#C2410C", "#8A96A3", "#14213D", "#5B6675"
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 11, "axes.edgecolor": "#C9D1D9",
@@ -44,38 +45,86 @@ def three_people():
     return [{k: float(df.loc[i, k]) for k in MEASURES} for i in picks]
 
 
-def hero(path=None):
-    """Three people (small, median, large) rendered at the same scale, side by side."""
-    path = path or FIGURES / "hero.png"
-    people = three_people()
-    meshes = [geometry.build_afo(m, {"vent_rows": 4}) for m in people]
-    r = max(float(np.max(a.extents)) for a in meshes) / 2 + 5
-    tiles = []
-    for a in meshes:
-        fig = plt.figure(figsize=(4.4, 5.6), dpi=320)
-        fig.patch.set_alpha(0)
-        ax = fig.add_axes([0, 0, 1, 1], projection="3d")
-        ax.patch.set_alpha(0)
-        draw(ax, a, elev=12, azim=-62)
-        c = (a.bounds[0] + a.bounds[1]) / 2
-        c[2] = a.bounds[0][2] + r                       # common floor so heights compare
-        ax.set_xlim(c[0] - r, c[0] + r); ax.set_ylim(c[1] - r, c[1] + r); ax.set_zlim(c[2] - r, c[2] + r)
-        ax.set_box_aspect((1, 1, 1))
-        fig.canvas.draw()
-        tiles.append(Image.frombuffer("RGBA", fig.canvas.get_width_height(), fig.canvas.buffer_rgba()).copy())
-        plt.close(fig)
+def _tile(parts, elev, azim, r=None, floor=None, size=(4.4, 5.6), dpi=320):
+    """Transparent render of (mesh, colour) pairs; common radius r and floor so several tiles share a scale."""
+    fig = plt.figure(figsize=size, dpi=dpi)
+    fig.patch.set_alpha(0)
+    ax = fig.add_axes([0, 0, 1, 1], projection="3d")
+    ax.patch.set_alpha(0)
+    draw_parts(ax, parts, elev=elev, azim=azim)
+    lo = np.min([m.bounds[0] for m, _ in parts], 0)
+    hi = np.max([m.bounds[1] for m, _ in parts], 0)
+    r = r or float(np.max(hi - lo)) / 2 + 5
+    c = (lo + hi) / 2
+    c[2] = (lo[2] if floor is None else floor) + r
+    ax.set_xlim(c[0] - r, c[0] + r); ax.set_ylim(c[1] - r, c[1] + r); ax.set_zlim(c[2] - r, c[2] + r)
+    ax.set_box_aspect((1, 1, 1))
+    fig.canvas.draw()
+    im = Image.frombuffer("RGBA", fig.canvas.get_width_height(), fig.canvas.buffer_rgba()).copy()
+    plt.close(fig)
+    return im
+
+
+def _row(tiles, gap=40):
     boxes = [t.getbbox() for t in tiles]
     top, bottom = min(b[1] for b in boxes), max(b[3] for b in boxes)
     crops = [t.crop((b[0], top, b[2], bottom)) for t, b in zip(tiles, boxes)]
-    gap = 40
-    W = sum(c.width for c in crops) + gap * (len(crops) - 1)
-    out = Image.new("RGBA", (W, bottom - top), (0, 0, 0, 0))
+    out = Image.new("RGBA", (sum(c.width for c in crops) + gap * (len(crops) - 1), bottom - top), (0, 0, 0, 0))
     x = 0
     for c in crops:
         out.paste(c, (x, 0), c)
         x += c.width + gap
-    out.save(path)
+    return out
+
+
+def hero(path=None):
+    """Three people (small, median, large), segmented articulated orthoses at the same scale, side by side."""
+    path = path or FIGURES / "hero.png"
+    people = three_people()
+    builds = [sg.build_segmented(m, {"vent_rows": 3, "plantar_stop_deg": 5.0}) for m in people]
+    r = max(float(np.max(np.max([P["upper"].bounds[1], P["lower"].bounds[1]], 0)
+                         - np.min([P["upper"].bounds[0], P["lower"].bounds[0]], 0))) for P in builds) / 2 + 5
+    _row([_tile(assembly(P), 12, -40, r=r) for P in builds]).save(path)
     return people
+
+
+def parts_figure(m, path=None):
+    """Median person: exploded view of the parts, then the foot section at plantar stop, neutral and dorsiflexion."""
+    path = path or FIGURES / "parts.png"
+    P = ar.build_articulated(m, {"vent_rows": 3, "plantar_stop_deg": 5.0})
+    E = ar.exploded(P, gap=55.0)
+    j = P["joint"]
+    ex = _tile([(E["lower"], BASE), (E["upper"], NAVY), (E["pins"], STEEL)], 14, -35, size=(5, 6.2), dpi=260)
+    ex = ex.crop(ex.getbbox())
+    cut = j.origin[2] + 90
+    upper = P["upper"].slice_plane([0, 0, cut], [0, 0, -1], cap=True)
+    poses = [_tile([(ar.rotate_about_axis(P["lower"], j, d), BASE), (upper, NAVY), (P["pins"], STEEL)],
+                   6, 0, r=125, floor=-30, size=(4, 4), dpi=240) for d in (-5.0, 0.0, 15.0)]
+    boxes = [t.getbbox() for t in poses]
+    box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    poses = [t.crop(box) for t in poses]
+
+    fig = plt.figure(figsize=(13, 5.6), dpi=160)
+    fig.text(0.02, 0.93, "Separate printable parts", fontsize=13, fontweight="bold", color=INK)
+    fig.text(0.02, 0.885, "exploded view, median person", fontsize=10, color=MUTED)
+    ax = fig.add_axes([0.03, 0.03, 0.22, 0.82]); ax.imshow(ex); ax.set_axis_off()
+    zlo = E["lower"].bounds[0][2]; zhi = E["upper"].bounds[1][2]
+    def yfrac(z):
+        return (z - zlo) / (zhi - zlo)
+    for t, c, z in (("calf cuff", NAVY, 0.5 * (cut + 55 + zhi)),
+                    ("M5 pins", STEEL, j.origin[2] + 55 * 0.5 + 6),
+                    ("foot section", BASE, zlo + 25)):
+        ax.text(1.04, yfrac(z), t, transform=ax.transAxes, color=tuple(c * 0.85), fontsize=11,
+                fontweight="bold", va="center")
+    fig.text(0.40, 0.93, "Hinged at the ankle, stopped where the setting says", fontsize=13, fontweight="bold", color=INK)
+    fig.text(0.40, 0.885, "foot section turned about the malleolar axis; the cuff stops it at the 5° plantarflexion setting",
+             fontsize=10, color=MUTED)
+    names = {-5: "plantar stop", 0: "neutral", 15: "dorsiflexion"}
+    for k, (deg, im) in enumerate(zip((-5, 0, 15), poses)):
+        ax = fig.add_axes([0.40 + k * 0.2, 0.16, 0.19, 0.62]); ax.imshow(im); ax.set_axis_off()
+        ax.text(0.5, -0.12, f"{deg:+d}°  {names[deg]}", transform=ax.transAxes, ha="center", color=INK, fontsize=11)
+    fig.savefig(path, facecolor="white")
+    plt.close(fig)
 
 
 def sizing():
@@ -121,7 +170,7 @@ def assistant():
     ax.set_xticks([0, 25, 50, 75, 100])
     ax.set_xlabel("unseen people predicted within tolerance (%)")
     ax.grid(axis="y", visible=False)
-    title(ax, "Lengths can be predicted, girths need the tape",
+    title(ax, "Six of eight measurements predicted from four inputs",
           "LightGBM from foot length, height, weight and sex; 25 % of people held out")
     fig.tight_layout()
     fig.savefig(FIGURES / "assistant.png", dpi=160)
@@ -196,20 +245,114 @@ def scan_fit():
     plt.close(fig)
 
 
+def _frame_rgb(parts, elev, azim, lo, hi, pad=0, size=4.2):
+    fig = plt.figure(figsize=(size, size), facecolor="white")
+    ax = fig.add_axes([-0.15, -0.15, 1.3, 1.3], projection="3d")
+    draw_parts(ax, parts, elev=elev, azim=azim)
+    frame(ax, lo, hi, pad=pad)
+    fig.canvas.draw()
+    im = Image.frombuffer("RGBA", fig.canvas.get_width_height(), fig.canvas.buffer_rgba()).convert("RGB")
+    plt.close(fig)
+    return im.quantize(colors=96, method=Image.Quantize.MEDIANCUT)
+
+
 def turntable(m, path=None, n=36):
     path = path or FIGURES / "turntable.gif"
-    afo = geometry.build_afo(m, {"vent_rows": 4})
-    frames = []
-    for k in range(n):
-        fig = plt.figure(figsize=(4.2, 4.2), facecolor="white")
-        ax = fig.add_axes([-0.15, -0.15, 1.3, 1.3], projection="3d")
-        draw(ax, afo, elev=16, azim=-60 + k * 360 / n)
-        frame(ax, afo.bounds[0], afo.bounds[1], pad=0)
-        fig.canvas.draw()
-        im = Image.frombuffer("RGBA", fig.canvas.get_width_height(), fig.canvas.buffer_rgba()).convert("RGB")
-        frames.append(im.quantize(colors=96, method=Image.Quantize.MEDIANCUT))
-        plt.close(fig)
+    P = sg.build_segmented(m, {"vent_rows": 3, "plantar_stop_deg": 5.0})
+    parts = assembly(P)
+    lo = np.min([x.bounds[0] for x, _ in parts], 0); hi = np.max([x.bounds[1] for x, _ in parts], 0)
+    frames = [_frame_rgb(parts, 16, -60 + k * 360 / n, lo, hi) for k in range(n)]
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=90, loop=0, optimize=True)
+
+
+GAIT = [("foot flat", 0.0, (0.0, 0.0, 0.0)),
+        ("heel rise", 10.0, (2.0, 2.0, 15.0)),
+        ("toe-off", -5.0, (4.0, 4.0, 30.0))]
+
+
+def _posed(P, ankle, foot, upper):
+    """Assembly posed at the ankle and foot joints, shown in the ground frame: toes flat, heel and leg lifted."""
+    Q = sg.pose(P, foot, ankle_deg=ankle)
+    parts = [(Q[k], SEG_COLORS[k]) for k in SEG_COLORS] + [(Q["foot_pins"], STEEL)]
+    j = P["joint"]
+    ank = [upper.copy(), P["pins"].copy()]
+    parts += [(ank[0], NAVY), (ank[1], STEEL)]
+    tip = Q["toes"].vertices[np.argmax(Q["toes"].vertices[:, 1])]
+    R = trimesh.transformations.rotation_matrix(np.radians(-(ankle + sum(foot))), [1, 0, 0], [0, tip[1], 0.0])
+    meshes = []
+    for m_, c in parts:
+        m_ = m_.copy(); m_.apply_transform(R); meshes.append((m_, c))
+    zmin = min(m_.bounds[0][2] for m_, _ in meshes[:4])
+    for m_, _ in meshes:
+        m_.apply_translation([0, 0, -zmin])
+    return meshes
+
+
+def _gait_frames(P, n):
+    """Ankle and foot angles from foot flat through heel rise to toe-off."""
+    keys = np.array([[g[1], *g[2]] for g in GAIT])
+    ts = np.linspace(0, len(GAIT) - 1, n)
+    return [(float(np.interp(t, range(len(GAIT)), keys[:, 0])),
+             tuple(float(np.interp(t, range(len(GAIT)), keys[:, i])) for i in (1, 2, 3))) for t in ts]
+
+
+def motion(m, path=None, n=28):
+    """Roll-over: foot flat, heel rise, toe-off and back, in the ground frame."""
+    path = path or FIGURES / "motion.gif"
+    P = sg.build_segmented(m, {"vent_rows": 3, "plantar_stop_deg": 5.0})
+    j = P["joint"]
+    upper = P["upper"].slice_plane([0, 0, j.origin[2] + 90], [0, 0, -1], cap=True)
+    seq = _gait_frames(P, n // 2)
+    posed = [_posed(P, a, f, upper) for a, f in seq + seq[::-1]]
+    lo = np.min([x.bounds[0] for fr in posed for x, _ in fr], 0)
+    hi = np.max([x.bounds[1] for fr in posed for x, _ in fr], 0)
+    frames = [_frame_rgb(fr, 8, -20, lo, hi, pad=-25) for fr in posed]
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=90, loop=0, optimize=True)
+
+
+def segments_figure(m, path=None):
+    """Median person: the foot as bone segments (exploded, labelled) and three stages of push-off."""
+    path = path or FIGURES / "segments.png"
+    P = sg.build_segmented(m, {"vent_rows": 3, "plantar_stop_deg": 5.0})
+    j = P["joint"]
+    upper = P["upper"].slice_plane([0, 0, j.origin[2] + 90], [0, 0, -1], cap=True)
+    gap = 26.0
+    ex, labels = [], []
+    for k, (name, bones) in enumerate(sg.SEGMENTS):
+        mesh = P["segments"][name].copy()
+        mesh.apply_translation([0, k * gap, 0])
+        ex.append((mesh, SEG_COLORS[name]))
+        labels.append((name, bones, mesh.bounds))
+    big = _tile(ex, 40, -35, size=(6, 6), dpi=260)
+    big = big.crop(big.getbbox())
+    stages = [(g, f"{g[0]}: ankle {g[1]:+.0f}°, MTP {g[2][2]:.0f}°") for g in GAIT]
+    poses = [_tile(_posed(P, g[1], g[2], upper), 6, 0, r=150, floor=0, size=(4, 4), dpi=230) for g, _ in stages]
+    boxes = [t.getbbox() for t in poses]
+    box = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    poses = [t.crop(box) for t in poses]
+
+    fig = plt.figure(figsize=(14, 6.4), dpi=160)
+    fig.text(0.02, 0.93, "One printed part per bone group", fontsize=13, fontweight="bold", color=INK)
+    fig.text(0.02, 0.885, "segments of the Oxford and Rizzoli foot models, pin hinges at the anatomical joints",
+             fontsize=10, color=MUTED)
+    ax = fig.add_axes([0.02, 0.04, 0.30, 0.80]); ax.imshow(big); ax.set_axis_off()
+    ax2 = fig.add_axes([0.33, 0.10, 0.12, 0.72]); ax2.set_axis_off()
+    joints = ["ankle (M5)", "Chopart (M3)", "Lisfranc (M3)", "MTP, oblique (M3)"]
+    for k, (name, bones, _) in enumerate(labels[::-1]):
+        y = 0.86 - k * 0.24
+        c = tuple(SEG_COLORS[name] * 0.9)
+        ax2.text(0, y, name, color=c, fontsize=11.5, fontweight="bold", transform=ax2.transAxes)
+        ax2.text(0, y - 0.055, bones, color=INK, fontsize=9.5, transform=ax2.transAxes)
+        ax2.text(0, y - 0.105, "joint: " + joints[3 - k], color=MUTED, fontsize=9, transform=ax2.transAxes)
+    fig.text(0.49, 0.93, "Rolls over the toes, stays rigid under load", fontsize=13, fontweight="bold", color=INK)
+    rng = [int(round(jj.range_deg)) for jj in P["foot_joints"]]
+    fig.text(0.49, 0.9, f"axes above the plate: joints open upwards (up to Chopart {rng[0]}°, Lisfranc {rng[1]}°, MTP {rng[2]}°)\n"
+             "and lock flat against each other when loaded; shown in the ground frame", fontsize=10, color=MUTED, va="top")
+    for k, ((t, lab), im) in enumerate(zip(stages, poses)):
+        ax = fig.add_axes([0.49 + k * 0.17, 0.16, 0.16, 0.62]); ax.imshow(im); ax.set_axis_off()
+        ax.text(0.5, -0.1, lab, transform=ax.transAxes, ha="center", color=INK, fontsize=10)
+    fig.savefig(path, facecolor="white")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -219,5 +362,8 @@ if __name__ == "__main__":
     stiffness()
     build_volume()
     scan_fit()
+    parts_figure(S["median_person"])
+    segments_figure(S["median_person"])
     turntable(S["median_person"])
+    motion(S["median_person"])
     print("figures written to", FIGURES)

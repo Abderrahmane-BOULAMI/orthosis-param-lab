@@ -44,8 +44,31 @@ DESIGN = {
     "calf_ratio": 1.15,        # width / depth of the calf cross-section (assumption)
     "plate_length": 0.95,      # footplate length as a share of foot length
     "vent_rows": 0,            # ventilation holes in the calf shell (0 = solid)
-    "levels": 36,              # cross-sections along the leg
-    "arc_points": 48,          # points per cross-section arc
+    "levels": 56,              # cross-sections along the leg
+    "arc_points": 64,          # points per cross-section arc
+    # anatomy (assumptions where ANSUR has no measurement; a scan replaces the leg part)
+    "side": "right",           # which leg: the lateral malleolus is on +x for a right leg
+    "heel_radius": 12.0,       # rounding of the heel pad where it meets the sole
+    "heel_bulge": 3.0,         # how far the heel sits behind the Achilles line at its fullest
+    "achilles_inset": 9.0,     # how far the Achilles tendon sits in front of the heel line
+    "medial_offset": 10.0,     # medial malleolus centre above the lateral one
+    "malleolus_relief": 3.0,   # extra clearance (dome) over each malleolus
+    # footplate
+    "arch_height": 6.0,        # medial longitudinal arch support
+    "wall_height": 14.0,       # low medial and lateral walls along the heel and midfoot
+    # articulated version
+    "hinge_radius": 16.0,      # radius of the flat hinge discs
+    "pin_diameter": 5.3,       # hole for an M5 pin or screw
+    "print_gap": 0.4,          # clearance between moving parts printed apart
+    # segmented foot: one printed part per functional bone group, hinged at the anatomical joint lines
+    "chopart_at": 0.34,        # midtarsal (Chopart) joint, share of foot length from the heel
+    "metatarsal_length": 0.24, # first metatarsal, share of foot length: Lisfranc joint = ball_length - this
+    "mtp_obliquity": 20.0,     # metatarsophalangeal line, degrees from medio-lateral (lateral side further back)
+    "midfoot_range": 10.0,     # dorsiflexion allowed at Chopart and Lisfranc, degrees
+    "mtp_range": 40.0,         # toe dorsiflexion allowed at the MTP joint (toe-off), degrees
+    "foot_knuckle_radius": 6.0,
+    "foot_pin_diameter": 3.2,  # hole for an M3 pin or screw
+    "strap_slots": True,       # strap slots in the calf cuff
 }
 
 # Printing assumptions

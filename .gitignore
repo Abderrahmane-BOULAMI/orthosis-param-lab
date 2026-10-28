@@ -6,3 +6,8 @@ results/run_full.log
 docs/figures/sample/
 outputs/batch/
 patients.csv
+README_sample.md
+results/*.log
+results/sample/*.log
+outputs/articulated/
+outputs/segmented/

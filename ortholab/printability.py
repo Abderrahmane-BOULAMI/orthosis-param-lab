@@ -69,9 +69,9 @@ def wall_thickness(mesh, n=400, seed=0):
     keep = np.abs(normals[:, 2]) < 0.7
     prof = mesh.metadata.get("profile")
     if prof is not None:
-        t = mesh.metadata.get("params", {}).get("thickness", 0.0)
-        _, b = prof.at(np.maximum(pts[:, 2] - t, 0.0))
-        radial = np.column_stack([pts[:, 0], pts[:, 1] - b, np.zeros(len(pts))])
+        from .geometry import section
+        _, b, y0 = section(prof, pts[:, 2], mesh.metadata.get("params", {}))
+        radial = np.column_stack([pts[:, 0], pts[:, 1] - (y0 + b), np.zeros(len(pts))])
         radial /= np.linalg.norm(radial, axis=1, keepdims=True) + 1e-9
         keep &= np.abs((normals * radial).sum(axis=1)) > 0.8
     pts, normals = pts[keep], normals[keep]
